@@ -1,6 +1,8 @@
-import os
+import os, json
 from flask import Flask, jsonify, render_template, request
 from trino.dbapi import connect
+from trino.exceptions import TrinoExternalError, TrinoUserError, TrinoUnavailableError, HttpError
+import urllib.request
 from collections import defaultdict
 
 TRINO_HOST = os.getenv("TRINO_HOST", "127.0.0.1")
@@ -11,12 +13,44 @@ MYSQL_SCHEMA = os.getenv("MYSQL_SCHEMA", "crm_1")
 app = Flask(__name__)
 
 def trino_conn():
-    return connect(host=TRINO_HOST, port=TRINO_PORT, user=TRINO_USER)
+    # Explicitly use HTTP; no auth for this demo
+    return connect(
+        host=TRINO_HOST,
+        port=TRINO_PORT,
+        user=TRINO_USER,
+        http_scheme="http",
+    )
+
+def run_query(sql):
+    try:
+        with trino_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(sql)
+            return cur.fetchall()
+    except (TrinoUserError, TrinoExternalError, TrinoUnavailableError, HttpError) as e:
+        app.logger.error("Trino error: %s", repr(e))
+        raise
+    except Exception as e:
+        app.logger.error("General error talking to Trino: %s", repr(e))
+        raise
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+# --- Health check to verify connectivity to Trino ---
+@app.get("/api/health")
+def health():
+    info_url = f"http://{TRINO_HOST}:{TRINO_PORT}/v1/info"
+    try:
+        with urllib.request.urlopen(info_url, timeout=5) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return jsonify({"ok": True, "target": info_url, "info": data})
+    except Exception as e:
+        app.logger.error("Health check failed to %s: %r", info_url, e)
+        return jsonify({"ok": False, "target": info_url, "error": repr(e)}), 500
+
+# ---------------- KPIs ----------------
 @app.get("/api/kpis")
 def kpis():
     sql = f"""
@@ -40,9 +74,7 @@ def kpis():
     FROM totals t
     CROSS JOIN top_seg s
     """
-    with trino_conn() as conn:
-        cur = conn.cursor(); cur.execute(sql)
-        row = cur.fetchone()
+    row = run_query(sql)[0]
     return jsonify({
         "total_revenue": float(row[0]),
         "total_orders": int(row[1]),
@@ -50,6 +82,7 @@ def kpis():
         "top_segment": row[3]
     })
 
+# --------------- Federated charts ---------------
 @app.get("/api/revenue_by_segment")
 def revenue_by_segment():
     sql = f"""
@@ -60,9 +93,7 @@ def revenue_by_segment():
     GROUP BY v.segment
     ORDER BY revenue DESC
     """
-    with trino_conn() as conn:
-        cur = conn.cursor(); cur.execute(sql)
-        rows = cur.fetchall()
+    rows = run_query(sql)
     return jsonify({"labels": [r[0] for r in rows], "values": [float(r[1]) for r in rows]})
 
 @app.get("/api/revenue_share_by_segment")
@@ -75,18 +106,13 @@ def revenue_share_by_segment():
     GROUP BY v.segment
     ORDER BY revenue DESC
     """
-    with trino_conn() as conn:
-        cur = conn.cursor(); cur.execute(sql)
-        rows = cur.fetchall()
+    rows = run_query(sql)
     return jsonify({"labels": [r[0] for r in rows], "values": [float(r[1]) for r in rows]})
 
 @app.get("/api/monthly_revenue_by_segment")
 def monthly_revenue_by_segment():
     sql = f"""
-    WITH bounds AS (
-        SELECT max(orderdate) AS maxd
-        FROM tpch.tiny.orders
-    )
+    WITH bounds AS (SELECT max(orderdate) AS maxd FROM tpch.tiny.orders)
     SELECT date_trunc('month', o.orderdate) AS m,
            v.segment,
            ROUND(SUM(o.totalprice), 2) AS revenue
@@ -98,10 +124,7 @@ def monthly_revenue_by_segment():
     GROUP BY 1, 2
     ORDER BY 1, 2
     """
-    with trino_conn() as conn:
-        cur = conn.cursor(); cur.execute(sql)
-        rows = cur.fetchall()
-
+    rows = run_query(sql)
     months = sorted({str(r[0])[:7] for r in rows})  # 'YYYY-MM'
     by_seg = defaultdict(lambda: {m: 0.0 for m in months})
     for m, seg, rev in rows:
@@ -112,7 +135,7 @@ def monthly_revenue_by_segment():
 
 @app.get("/api/top_customers")
 def top_customers():
-    limit = int(request.args.get("limit", 5))
+    limit = int(request.args.get("limit", 20))
     sql = f"""
     SELECT c.name AS customer_name, v.segment, COUNT(o.orderkey) AS orders, ROUND(SUM(o.totalprice), 2) AS revenue
     FROM tpch.tiny.customer c
@@ -122,9 +145,7 @@ def top_customers():
     ORDER BY revenue DESC
     LIMIT {limit}
     """
-    with trino_conn() as conn:
-        cur = conn.cursor(); cur.execute(sql)
-        rows = cur.fetchall()
+    rows = run_query(sql)
     data = [{"customer_name": r[0], "segment": r[1], "orders": int(r[2]), "revenue": float(r[3])} for r in rows]
     return jsonify({"rows": data})
 
@@ -138,9 +159,7 @@ def avg_order_value_by_segment():
     GROUP BY v.segment
     ORDER BY avg_order_value DESC
     """
-    with trino_conn() as conn:
-        cur = conn.cursor(); cur.execute(sql)
-        rows = cur.fetchall()
+    rows = run_query(sql)
     return jsonify({"labels": [r[0] for r in rows], "values": [float(r[1]) for r in rows]})
 
 @app.get("/api/orders_count_by_segment")
@@ -153,12 +172,10 @@ def orders_count_by_segment():
     GROUP BY v.segment
     ORDER BY orders DESC
     """
-    with trino_conn() as conn:
-        cur = conn.cursor(); cur.execute(sql)
-        rows = cur.fetchall()
+    rows = run_query(sql)
     return jsonify({"labels": [r[0] for r in rows], "values": [int(r[1]) for r in rows]})
 
 if __name__ == "__main__":
-    # Railway gives you $PORT for the public HTTP port
     port = int(os.getenv("PORT", "5000"))
+    app.logger.info("Starting web app; TRINO_HOST=%s TRINO_PORT=%s MYSQL_SCHEMA=%s", TRINO_HOST, TRINO_PORT, MYSQL_SCHEMA)
     app.run(host="0.0.0.0", port=port, debug=False)
