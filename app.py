@@ -1,7 +1,7 @@
 import os, json
 from flask import Flask, jsonify, render_template, request
 from trino.dbapi import connect
-from trino.exceptions import TrinoExternalError, TrinoUserError, TrinoUnavailableError, HttpError
+from trino.exceptions import TrinoExternalError, TrinoUserError, HttpError
 import urllib.request
 from collections import defaultdict
 
@@ -27,7 +27,7 @@ def run_query(sql):
             cur = conn.cursor()
             cur.execute(sql)
             return cur.fetchall()
-    except (TrinoUserError, TrinoExternalError, TrinoUnavailableError, HttpError) as e:
+    except (TrinoUserError, TrinoExternalError, HttpError) as e:   # <-- removed TrinoUnavailableError
         app.logger.error("Trino error: %s", repr(e))
         raise
     except Exception as e:
