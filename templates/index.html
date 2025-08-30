@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Trino Federated SQL Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="dashboard-container">
+    <header class="dashboard-header">
+      <h1>Presto/Trino – Federated SQL Demo</h1>
+      <p>One ANSI SQL over <strong>TPCH</strong> + <strong>MySQL (XAMPP)</strong>, no ETL.</p>
+    </header>
+
+    <!-- KPI cards -->
+    <section class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Revenue</div>
+        <div class="kpi-value" id="kpiTotalRevenue">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Orders</div>
+        <div class="kpi-value" id="kpiTotalOrders">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Order Value</div>
+        <div class="kpi-value" id="kpiAvgOrderValue">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Top Segment</div>
+        <div class="kpi-value" id="kpiTopSegment">—</div>
+      </div>
+    </section>
+
+    <main class="dashboard-grid">
+      <div class="grid-row">
+        <div class="grid-col-4">
+          <section class="visual-card">
+            <h3>Revenue by Segment</h3>
+            <div class="chart-container">
+              <canvas id="barSegment"class="chart-tall"></canvas>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid-col-4">
+          <section class="visual-card">
+            <h3>Revenue Share</h3>
+            <div class="chart-container">
+              <canvas id="pieShare"></canvas>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid-col-4">
+          <section class="visual-card">
+            <h3>Avg Order Value</h3>
+            <div class="chart-container">
+              <canvas id="barAOVSegment" class="chart-tall"></canvas>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="grid-row">
+        <div class="grid-col-6">
+          <section class="visual-card">
+            <h3>Monthly Revenue by Segment</h3>
+            <div class="chart-container">
+              <canvas id="lineMonthly"></canvas>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid-col-6">
+          <section class="visual-card">
+            <h3>Orders by Segment</h3>
+            <div class="chart-container">
+              <canvas id="barOrdersSegment"></canvas>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="grid-row">
+        <div class="grid-col-12">
+          <section class="visual-card">
+            <div class="table-header">
+              <h3>Top Customers</h3>
+              <div class="table-controls">
+                <label>Limit:
+                  <input id="limitInput" type="number" min="5" max="200" value="5"/>
+                </label>
+                <button id="refreshBtn" class="refresh-button">Refresh</button>
+              </div>
+            </div>
+            <div class="table-container">
+              <table id="customersTable">
+                <thead>
+                  <tr><th>Customer</th><th>Segment</th><th>Orders</th><th>Revenue</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="dashboard-footer">
+      <small>Powered by Trino (Docker) + XAMPP MySQL + Flask</small>
+    </footer>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

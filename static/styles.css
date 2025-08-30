@@ -1,0 +1,222 @@
+:root {
+  --bg: #0b1220;
+  --card: #121a2d;
+  --text: #e6e9f2;
+  --muted: #9aa3b2;
+  --accent: #5b8cff;
+  --border: #e1e5eb;
+  --success: #107c10;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  --hover: rgba(0, 120, 212, 0.1);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+}
+
+.dashboard-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.dashboard-header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.dashboard-header h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dashboard-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* KPI cards */
+.kpi-row {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 20px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  transition: all 0.2s ease;
+}
+.kpi-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.kpi-label {
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.kpi-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Dashboard grid layout */
+.dashboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.grid-row {
+  display: flex;
+  gap: 20px;
+}
+.grid-col-4 {
+  flex: 0 0 calc(33.333% - 14px);
+}
+.grid-col-6 {
+  flex: 0 0 calc(50% - 10px);
+}
+.grid-col-12 {
+  flex: 0 0 100%;
+}
+
+/* Visual cards */
+.visual-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.visual-card h3 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Chart containers */
+.chart-container {
+  flex: 1;
+  min-height: 250px;
+  position: relative;
+}
+
+/* Table styles */
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.table-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.table-container {
+  overflow: auto;
+  max-height: 400px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  background-color: #0b1220;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+tbody tr {
+  transition: background-color 0.2s;
+}
+tbody tr:hover {
+  background-color: var(--hover);
+}
+
+/* Form elements */
+input {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  width: 70px;
+}
+button {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+button:hover {
+  background-color: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.refresh-button {
+  background-color: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+}
+.refresh-button:hover {
+  background-color: #106ebe;
+  border-color: #106ebe;
+}
+
+.dashboard-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.chart-tall { height: 180px; }
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-row { flex-direction: column; }
+  .grid-col-4, .grid-col-6 { flex: 0 0 100%; }
+}
+
+@media (max-width: 768px) {
+  .dashboard-container { padding: 12px; }
+  .kpi-row { grid-template-columns: 1fr; }
+  .table-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+
