@@ -1,4 +1,4 @@
-// public/app.js (or wherever you serve it from)
+// public/app.js
 
 let barSegmentChart, pieShareChart, lineMonthlyChart, barAOVSegmentChart, barOrdersSegmentChart;
 
@@ -42,7 +42,7 @@ function renderBarSegment(data) {
   });
 }
 
-// Pie: share by segment (reuse the same revenue array — client can show share visually)
+// Pie: share by segment
 function renderPieShare(data) {
   const ctx = document.getElementById("pieShare").getContext("2d");
   destroyChart(pieShareChart);
