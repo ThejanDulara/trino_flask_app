@@ -22,9 +22,4 @@ ENV SMALL_CACHE_TTL=30
 
 # Gunicorn with limited workers/threads to avoid thread explosion
 # Railway sets $PORT
-CMD ["gunicorn", "app:app", \
-     "--workers=2", \
-     "--threads=4", \
-     "--timeout=60", \
-     "--log-level=info", \
-     "--bind=0.0.0.0:${PORT}"]
+CMD gunicorn app:app --workers=2 --threads=4 --timeout=60 --log-level=info --bind=0.0.0.0:$PORT
