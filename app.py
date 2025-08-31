@@ -57,7 +57,6 @@ def run_query(sql: str):
                 cur.execute(sql)
                 return cur.fetchall()
     except (TrinoUserError, TrinoExternalError, HttpError) as e:
-        # Avoid log spam; keep succinct
         name = getattr(e, "error_name", e.__class__.__name__)
         log.warning("Trino error: %s", name)
         raise
@@ -76,40 +75,48 @@ def cache_ttl(key: str, ttl: int, fn):
     return v
 
 
-# ------------------ Query builders (12-month window) ------------------
-WINDOW_FILTER = "o.orderdate >= date_add('month', -12, current_date)"
-
+# -------------------------------------------------
+# Queries anchored to data's max(orderdate) (not current_date)
+# -------------------------------------------------
 def compute_kpis():
     def _do():
         sql = f"""
-        WITH totals AS (
+        WITH bounds AS (SELECT max(orderdate) AS maxd FROM tpch.tiny.orders),
+        totals AS (
             SELECT
-                ROUND(SUM(o.totalprice), 2) AS total_revenue,
-                COUNT(*)                    AS total_orders,
-                ROUND(AVG(o.totalprice), 2) AS avg_order_value
+                ROUND(COALESCE(SUM(o.totalprice), 0), 2) AS total_revenue,
+                CAST(COUNT(*) AS BIGINT)                AS total_orders,
+                ROUND(COALESCE(AVG(o.totalprice), 0),2) AS avg_order_value
             FROM tpch.tiny.orders o
-            WHERE {WINDOW_FILTER}
+            CROSS JOIN bounds b
+            WHERE o.orderdate >= date_add('month', -12, b.maxd)
         ),
         top_seg AS (
             SELECT v.segment, SUM(o.totalprice) AS rev
             FROM tpch.tiny.orders o
             JOIN tpch.tiny.customer c ON o.custkey = c.custkey
             JOIN mysql.{MYSQL_SCHEMA}.vip_customers v ON v.custkey = c.custkey
-            WHERE {WINDOW_FILTER}
+            CROSS JOIN bounds b
+            WHERE o.orderdate >= date_add('month', -12, b.maxd)
             GROUP BY v.segment
             ORDER BY rev DESC
             LIMIT 1
         )
-        SELECT t.total_revenue, t.total_orders, t.avg_order_value, s.segment AS top_segment
+        SELECT
+          t.total_revenue,
+          t.total_orders,
+          t.avg_order_value,
+          COALESCE(s.segment, '—') AS top_segment
         FROM totals t
-        CROSS JOIN top_seg s
+        LEFT JOIN top_seg s ON true
         """
-        row = run_query(sql)[0]
+        rows = run_query(sql)
+        row = rows[0] if rows else (0.0, 0, 0.0, "—")
         return {
-            "total_revenue": float(row[0]),
-            "total_orders": int(row[1]),
-            "avg_order_value": float(row[2]),
-            "top_segment": row[3],
+            "total_revenue": float(row[0] or 0),
+            "total_orders": int(row[1] or 0),
+            "avg_order_value": float(row[2] or 0),
+            "top_segment": row[3] or "—",
         }
     return cache_ttl("kpis", SMALL_CACHE_TTL, _do)
 
@@ -117,11 +124,13 @@ def compute_kpis():
 def compute_revenue_by_segment():
     def _do():
         sql = f"""
+        WITH bounds AS (SELECT max(orderdate) AS maxd FROM tpch.tiny.orders)
         SELECT v.segment, ROUND(SUM(o.totalprice), 2) AS revenue
         FROM tpch.tiny.orders o
         JOIN tpch.tiny.customer c ON o.custkey = c.custkey
         JOIN mysql.{MYSQL_SCHEMA}.vip_customers v ON v.custkey = c.custkey
-        WHERE {WINDOW_FILTER}
+        CROSS JOIN bounds b
+        WHERE o.orderdate >= date_add('month', -12, b.maxd)
         GROUP BY v.segment
         ORDER BY revenue DESC
         LIMIT {SEGMENT_LIMIT}
@@ -134,11 +143,13 @@ def compute_revenue_by_segment():
 def compute_avg_order_value_by_segment():
     def _do():
         sql = f"""
+        WITH bounds AS (SELECT max(orderdate) AS maxd FROM tpch.tiny.orders)
         SELECT v.segment, ROUND(AVG(o.totalprice), 2) AS avg_order_value
         FROM tpch.tiny.orders o
         JOIN tpch.tiny.customer c ON o.custkey = c.custkey
         JOIN mysql.{MYSQL_SCHEMA}.vip_customers v ON v.custkey = c.custkey
-        WHERE {WINDOW_FILTER}
+        CROSS JOIN bounds b
+        WHERE o.orderdate >= date_add('month', -12, b.maxd)
         GROUP BY v.segment
         ORDER BY avg_order_value DESC
         LIMIT {SEGMENT_LIMIT}
@@ -151,11 +162,13 @@ def compute_avg_order_value_by_segment():
 def compute_orders_count_by_segment():
     def _do():
         sql = f"""
+        WITH bounds AS (SELECT max(orderdate) AS maxd FROM tpch.tiny.orders)
         SELECT v.segment, COUNT(*) AS orders
         FROM tpch.tiny.orders o
         JOIN tpch.tiny.customer c ON o.custkey = c.custkey
         JOIN mysql.{MYSQL_SCHEMA}.vip_customers v ON v.custkey = c.custkey
-        WHERE {WINDOW_FILTER}
+        CROSS JOIN bounds b
+        WHERE o.orderdate >= date_add('month', -12, b.maxd)
         GROUP BY v.segment
         ORDER BY orders DESC
         LIMIT {SEGMENT_LIMIT}
@@ -167,7 +180,6 @@ def compute_orders_count_by_segment():
 
 def compute_monthly_revenue_by_segment():
     def _do():
-        # already limited to 12 months historically, keep as-is
         sql = f"""
         WITH bounds AS (SELECT max(orderdate) AS maxd FROM tpch.tiny.orders)
         SELECT date_trunc('month', o.orderdate) AS m,
@@ -196,6 +208,7 @@ def compute_top_customers(limit: int):
     key = f"top_customers_{limit}"
     def _do():
         sql = f"""
+        WITH bounds AS (SELECT max(orderdate) AS maxd FROM tpch.tiny.orders)
         SELECT c.name AS customer_name,
                v.segment,
                COUNT(o.orderkey)            AS orders,
@@ -203,7 +216,8 @@ def compute_top_customers(limit: int):
         FROM tpch.tiny.customer c
         JOIN tpch.tiny.orders   o ON o.custkey = c.custkey
         JOIN mysql.{MYSQL_SCHEMA}.vip_customers v ON v.custkey = c.custkey
-        WHERE {WINDOW_FILTER}
+        CROSS JOIN bounds b
+        WHERE o.orderdate >= date_add('month', -12, b.maxd)
         GROUP BY c.name, v.segment
         ORDER BY revenue DESC
         LIMIT {limit}
@@ -230,7 +244,6 @@ def health():
         return jsonify({"ok": False}), 503
 
 
-# ---- Individual endpoints (kept; now cached & windowed) ----
 @app.get("/api/kpis")
 def kpis():
     try:
@@ -251,7 +264,6 @@ def revenue_by_segment():
 
 @app.get("/api/revenue_share_by_segment")
 def revenue_share_by_segment():
-    # Same payload as revenue_by_segment (client visualizes as share)
     return revenue_by_segment()
 
 
@@ -293,7 +305,6 @@ def top_customers():
         return jsonify({"rows": []}), 200
 
 
-# ---- Aggregated dashboard ----
 @app.get("/api/dashboard")
 def dashboard():
     try:
