@@ -19,13 +19,25 @@ async function loadKpis() {
 
 // ---------- Charts ----------
 async function loadBarSegment() {
-  const data = await fetchJSON("/api/revenue_by_segment");
-  const ctx = document.getElementById("barSegment");
-  if (barSegmentChart) barSegmentChart.destroy();
+  const res = await fetch("/api/revenue_by_segment");
+  const data = await res.json(); // { labels: [...], values: [...] }
+
+  const ctx = document.getElementById("barSegment").getContext("2d");
   barSegmentChart = new Chart(ctx, {
     type: "bar",
     data: { labels: data.labels, datasets: [{ label: "Revenue", data: data.values }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+  });
+
+  return data; // <-- we’ll reuse this for the pie
+}
+
+function renderPieFrom(data) {
+  const ctx = document.getElementById("pieSegment").getContext("2d");
+  pieSegmentChart = new Chart(ctx, {
+    type: "pie",
+    data: { labels: data.labels, datasets: [{ data: data.values }] },
+    options: { responsive: true }
   });
 }
 
